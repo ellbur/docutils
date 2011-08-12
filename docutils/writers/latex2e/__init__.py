@@ -551,17 +551,16 @@ PreambleCmds.graphicx_auto = r"""% Check output format
 PreambleCmds.inline = r"""
 % inline markup (custom roles)
 % \DUrole{#1}{#2} tries \DUrole#1{#2}
-\providecommand*{\DUrole}[2]{%
-  \ifcsname DUrole#1\endcsname%
-    \csname DUrole#1\endcsname{#2}%
-  \else% backwards compatibility: try \docutilsrole#1{#2}
-    \ifcsname docutilsrole#1\endcsname%
-      \csname docutilsrole#1\endcsname{#2}%
-    \else%
-      #2%
-    \fi%
-  \fi%
-}"""
+""" + (
+r"\providecommand*{\DUrole}[2]{"+
+r"\ifcsname{DUrole#1}\endcsname"+
+r"{\csname{DUrole#1}\endcsname{#2}}"+
+r"\else{"+
+r"\ifcsname{docutilsrole#1}\endcsname"+
+r"{\csname{docutilsrole#1}\endcsname{#2}}"+
+r"\else{#2}\fi"+
+r"}\fi"+
+r"}")
 
 PreambleCmds.legend = r"""
 % legend environment
