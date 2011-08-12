@@ -70,22 +70,9 @@ How To Use This Module
    d) You may wish to override the `State.bof()` and/or `State.eof()` implicit
       transition methods, which handle the beginning- and end-of-file.
 
-   e) In order to handle nested processing, you may wish to override the
-      attributes `State.nested_sm` and/or `State.nested_sm_kwargs`.
-
-      If you are using `StateWS` as a base class, in order to handle nested
-      indented blocks, you may wish to:
-
-      - override the attributes `StateWS.indent_sm`,
-        `StateWS.indent_sm_kwargs`, `StateWS.known_indent_sm`, and/or
-        `StateWS.known_indent_sm_kwargs`;
-      - override the `StateWS.blank()` method; and/or
-      - override or extend the `StateWS.indent()`, `StateWS.known_indent()`,
-        and/or `StateWS.firstknown_indent()` methods.
-
 3. Create a state machine object::
 
-       sm = StateMachine(state_classes=[MyState, ...],
+       sm = StateMachine(states={'MyState': MyState(), ... },
                          initial_state='MyState')
 
 4. Obtain the input text, which needs to be converted into a tab-free list of
@@ -126,14 +113,14 @@ class StateMachine:
     results of processing in a list.
     """
 
-    def __init__(self, state_classes, initial_state, debug=0):
+    def __init__(self, states, initial_state, debug=0):
         """
         Initialize a `StateMachine` object; add state objects.
 
         Parameters:
 
-        - `state_classes`: a list of `State` (sub)classes.
-        - `initial_state`: a string, the class name of the initial state.
+        - `states`: a dict of `State` objects by state name.
+        - `initial_state`: a string, the name of the initial state.
         - `debug`: a boolean; produce verbose output if true (nonzero).
         """
 
@@ -159,10 +146,8 @@ class StateMachine:
         self.current_state = initial_state
         """The name of the current state (key to `self.states`)."""
 
-        self.states = {}
+        self.states = states
         """Mapping of {state_name: State_object}."""
-
-        self.add_states(state_classes)
 
         self.observers = []
         """List of bound methods or functions to call whenever the current
@@ -239,7 +224,7 @@ class StateMachine:
                         if self.debug:
                             print >>self._stderr, (
                                 '\nStateMachine.run: %s.eof transition'
-                                % state.__class__.__name__)
+                                % state.name)
                         result = state.eof(context)
                         results.extend(result)
                         break
@@ -252,7 +237,7 @@ class StateMachine:
                         print >>self._stderr, (
                               '\nStateMachine.run: TransitionCorrection to '
                               'state "%s", transition %s.'
-                              % (state.__class__.__name__, transitions[0]))
+                              % (state.name, transitions[0]))
                     continue
                 except StateCorrection, exception:
                     self.previous_line() # back up for another try
@@ -433,7 +418,7 @@ class StateMachine:
         Return the values returned by the transition method:
 
         - context: possibly modified from the parameter `context`;
-        - next state name (`State` subclass name);
+        - next state name;
         - the result output of the transition, a list.
 
         When there is no match, ``state.no_match()`` is called and its return
@@ -445,7 +430,7 @@ class StateMachine:
         if self.debug:
             print >>self._stderr, (
                   '\nStateMachine.check_line: state="%s", transitions=%r.'
-                  % (state.__class__.__name__, transitions))
+                  % (state.name, transitions))
         for name in transitions:
             pattern, method, next_state = state.transitions[name]
             match = pattern.match(self.line)
@@ -454,33 +439,14 @@ class StateMachine:
                     print >>self._stderr, (
                           '\nStateMachine.check_line: Matched transition '
                           '"%s" in state "%s".'
-                          % (name, state.__class__.__name__))
+                          % (name, state.name))
                 return method(match, context, next_state)
         else:
             if self.debug:
                 print >>self._stderr, (
                       '\nStateMachine.check_line: No match in state "%s".'
-                      % state.__class__.__name__)
+                      % state.name)
             return state.no_match(context, transitions)
-
-    def add_state(self, state_class):
-        """
-        Initialize & add a `state_class` (`State` subclass) object.
-
-        Exception: `DuplicateStateError` raised if `state_class` was already
-        added.
-        """
-        statename = state_class.__name__
-        if statename in self.states:
-            raise DuplicateStateError(statename)
-        self.states[statename] = state_class(self, self.debug)
-
-    def add_states(self, state_classes):
-        """
-        Add `state_classes` (a list of `State` subclasses).
-        """
-        for state_class in state_classes:
-            self.add_state(state_class)
 
     def runtime_init(self):
         """
@@ -570,29 +536,6 @@ class State:
     state name) pair. See `make_transitions()`. Override in subclasses.
     """
 
-    nested_sm = None
-    """
-    The `StateMachine` class for handling nested processing.
-
-    If left as ``None``, `nested_sm` defaults to the class of the state's
-    controlling state machine. Override it in subclasses to avoid the default.
-    """
-
-    nested_sm_kwargs = None
-    """
-    Keyword arguments dictionary, passed to the `nested_sm` constructor.
-
-    Two keys must have entries in the dictionary:
-
-    - Key 'state_classes' must be set to a list of `State` classes.
-    - Key 'initial_state' must be set to the name of the initial state class.
-
-    If `nested_sm_kwargs` is left as ``None``, 'state_classes' defaults to the
-    class of the current state, and 'initial_state' defaults to the name of
-    the class of the current state. Override in subclasses to avoid the
-    defaults.
-    """
-
     def __init__(self, state_machine, debug=0):
         """
         Initialize a `State` object; make & add initial transitions.
@@ -622,12 +565,6 @@ class State:
 
         self.debug = debug
         """Debugging mode on/off."""
-
-        if self.nested_sm is None:
-            self.nested_sm = self.state_machine.__class__
-        if self.nested_sm_kwargs is None:
-            self.nested_sm_kwargs = {'state_classes': [self.__class__],
-                                     'initial_state': self.__class__.__name__}
 
     def runtime_init(self):
         """
@@ -914,38 +851,6 @@ class StateWS(State):
     is triggered automatically.
     """
 
-    indent_sm = None
-    """
-    The `StateMachine` class handling indented text blocks.
-
-    If left as ``None``, `indent_sm` defaults to the value of
-    `State.nested_sm`.  Override it in subclasses to avoid the default.
-    """
-
-    indent_sm_kwargs = None
-    """
-    Keyword arguments dictionary, passed to the `indent_sm` constructor.
-
-    If left as ``None``, `indent_sm_kwargs` defaults to the value of
-    `State.nested_sm_kwargs`. Override it in subclasses to avoid the default.
-    """
-
-    known_indent_sm = None
-    """
-    The `StateMachine` class handling known-indented text blocks.
-
-    If left as ``None``, `known_indent_sm` defaults to the value of
-    `indent_sm`.  Override it in subclasses to avoid the default.
-    """
-
-    known_indent_sm_kwargs = None
-    """
-    Keyword arguments dictionary, passed to the `known_indent_sm` constructor.
-
-    If left as ``None``, `known_indent_sm_kwargs` defaults to the value of
-    `indent_sm_kwargs`. Override it in subclasses to avoid the default.
-    """
-
     ws_patterns = {'blank': ' *$',
                    'indent': ' +'}
     """Patterns for default whitespace transitions.  May be overridden in
@@ -962,14 +867,6 @@ class StateWS(State):
         Check for indent state machine attributes, set defaults if not set.
         """
         State.__init__(self, state_machine, debug)
-        if self.indent_sm is None:
-            self.indent_sm = self.nested_sm
-        if self.indent_sm_kwargs is None:
-            self.indent_sm_kwargs = self.nested_sm_kwargs
-        if self.known_indent_sm is None:
-            self.known_indent_sm = self.indent_sm
-        if self.known_indent_sm_kwargs is None:
-            self.known_indent_sm_kwargs = self.indent_sm_kwargs
 
     def add_initial_transitions(self):
         """

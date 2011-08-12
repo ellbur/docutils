@@ -141,6 +141,49 @@ class RSTStateMachine(StateMachineWS):
     The entry point to reStructuredText parsing is the `run()` method.
     """
 
+    def __init__(self,
+        rfc2822        = False,
+        initial_state  = None,
+        run_directives = { },
+        **other_options
+    ):
+        '''
+        other_options are passed to StateMachineWS.__init__()
+        '''
+        global state_classes
+        
+        if initial_state == None:
+            if rfc2822:
+                initial_state = 'RF⃗C2822Body'
+            else:
+                initial_state = 'Body'
+            
+        self.run_directives = run_directives
+        
+        states = {
+            'Body'                        : Body(self),
+            'BulletList'                  : BulletList(self),
+            'DefinitionList'              : DefinitionList(self),
+            'EnumeratedList'              : EnumeratedList(self),
+            'FieldList'                   : FieldList(self),
+            'OptionList'                  : OptionList(self),
+            'LineBlock'                   : LineBlock(self),
+            'ExtensionOptions'            : ExtensionOptions(self),
+            'Explicit'                    : Explicit(self),
+            'Text'                        : Text(self),
+            'Definition'                  : Definition(self),
+            'Line'                        : Line(self),
+            'SubstitutionDef'             : SubstitutionDef(self),
+            'RFC2822Body'                 : RFC2822Body(self),
+            'RFC2822List'                 : RFC2822List(self)
+        }
+        
+        StateMachineWS.__init__(self,
+            states = states,
+            initial_state = initial_state,
+            **other_options
+        )
+
     def run(self, input_lines, document, input_offset=0, match_titles=1,
             inliner=None):
         """
@@ -171,9 +214,7 @@ class RSTStateMachine(StateMachineWS):
         assert results == [], 'RSTStateMachine.run() results should be empty!'
         self.node = self.memo = None    # remove unneeded references
 
-
-class NestedStateMachine(StateMachineWS):
-
+class NestedStateMachine(RSTStateMachine):
     """
     StateMachine run from within other StateMachine runs, to parse nested
     document structures.
@@ -197,7 +238,6 @@ class NestedStateMachine(StateMachineWS):
                                'empty!')
         return results
 
-
 class RSTState(StateWS):
 
     """
@@ -206,12 +246,7 @@ class RSTState(StateWS):
     Contains methods used by all State subclasses.
     """
 
-    nested_sm = NestedStateMachine
-    nested_sm_cache = []
-
     def __init__(self, state_machine, debug=0):
-        self.nested_sm_kwargs = {'state_classes': state_classes,
-                                 'initial_state': 'Body'}
         StateWS.__init__(self, state_machine, debug)
 
     def runtime_init(self):
@@ -255,44 +290,31 @@ class RSTState(StateWS):
     def bof(self, context):
         """Called at beginning of file."""
         return [], []
-
-    def nested_parse(self, block, input_offset, node, match_titles=0,
-                     state_machine_class=None, state_machine_kwargs=None):
+    
+    def nested_parse(self, block, input_offset, node, match_titles=0):
         """
         Create a new StateMachine rooted at `node` and run it over the input
         `block`.
         """
-        use_default = 0
-        if state_machine_class is None:
-            state_machine_class = self.nested_sm
-            use_default += 1
-        if state_machine_kwargs is None:
-            state_machine_kwargs = self.nested_sm_kwargs
-            use_default += 1
+        state_machine = NestedStateMachine(
+            rfc2822 = False,
+            run_directives = self.state_machine.run_directives
+        )
+        
         block_length = len(block)
-
-        state_machine = None
-        if use_default == 2:
-            try:
-                state_machine = self.nested_sm_cache.pop()
-            except IndexError:
-                pass
-        if not state_machine:
-            state_machine = state_machine_class(debug=self.debug,
-                                                **state_machine_kwargs)
         state_machine.run(block, input_offset, memo=self.memo,
-                          node=node, match_titles=match_titles)
-        if use_default == 2:
-            self.nested_sm_cache.append(state_machine)
-        else:
-            state_machine.unlink()
+            node=node, match_titles=match_titles)
+        
+        # Cleanup?
+        state_machine.unlink()
+        
         new_offset = state_machine.abs_line_offset()
         # No `block.parent` implies disconnected -- lines aren't in sync:
         if block.parent and (len(block) - block_length) != 0:
             # Adjustment for block if modified in nested parse:
             self.state_machine.next_line(len(block) - block_length)
         return new_offset
-
+    
     def nested_list_parse(self, block, input_offset, node, initial_state,
                           blank_finish,
                           blank_finish_state=None,
@@ -305,22 +327,25 @@ class RSTState(StateWS):
         `block`. Also keep track of optional intermediate blank lines and the
         required final one.
         """
-        if state_machine_class is None:
-            state_machine_class = self.nested_sm
-        if state_machine_kwargs is None:
-            state_machine_kwargs = self.nested_sm_kwargs.copy()
-        state_machine_kwargs['initial_state'] = initial_state
-        state_machine = state_machine_class(debug=self.debug,
-                                            **state_machine_kwargs)
+        state_machine = NestedStateMachine(
+            initial_state = initial_state,
+            run_directives = self.state_machine.run_directives,
+            debug = self.debug
+        )
+
         if blank_finish_state is None:
             blank_finish_state = initial_state
-        state_machine.states[blank_finish_state].blank_finish = blank_finish
+            state_machine.states[blank_finish_state].blank_finish = blank_finish
+
         for key, value in extra_settings.items():
             setattr(state_machine.states[initial_state], key, value)
+
         state_machine.run(block, input_offset, memo=self.memo,
-                          node=node, match_titles=match_titles)
+            node=node, match_titles=match_titles)
+        
         blank_finish = state_machine.states[blank_finish_state].blank_finish
         state_machine.unlink()
+        
         return state_machine.abs_line_offset(), blank_finish
 
     def section(self, title, source, style, lineno, messages):
@@ -1102,7 +1127,7 @@ class Body(RSTState):
           'anonymous',
           'line',
           'text')
-
+    
     def indent(self, match, context, next_state):
         """Block quote."""
         indented, indent, line_offset, blank_finish = \
@@ -2028,13 +2053,20 @@ class Body(RSTState):
     def directive(self, match, **option_presets):
         """Returns a 2-tuple: list of nodes, and a "blank finish" boolean."""
         type_name = match.group(1)
-        directive_class, messages = directives.directive(
-            type_name, self.memo.language, self.document)
+        
+        if type_name in self.state_machine.run_directives:
+            directive_class = self.state_machine.run_directives[type_name]
+            messages = ''
+        else:
+            directive_class, messages = directives.directive(
+                type_name, self.memo.language, self.document)
+        
         self.parent += messages
         if directive_class:
             return self.run_directive(
                 directive_class, match, type_name, option_presets)
         else:
+            assert False
             return self.unknown_directive(type_name)
 
     def run_directive(self, directive, match, type_name, option_presets):
@@ -3051,7 +3083,4 @@ class QuotedLiteralBlock(RSTState):
         raise EOFError
 
 
-state_classes = (Body, BulletList, DefinitionList, EnumeratedList, FieldList,
-                 OptionList, LineBlock, ExtensionOptions, Explicit, Text,
-                 Definition, Line, SubstitutionDef, RFC2822Body, RFC2822List)
-"""Standard set of State classes used to start `RSTStateMachine`."""
+ 

@@ -136,21 +136,33 @@ class Parser(docutils.parsers.Parser):
     config_section = 'restructuredtext parser'
     config_section_dependencies = ('parsers',)
 
-    def __init__(self, rfc2822=None, inliner=None):
-        if rfc2822:
-            self.initial_state = 'RFC2822Body'
-        else:
-            self.initial_state = 'Body'
-        self.state_classes = states.state_classes
+    def __init__(self, rfc2822=None, inliner=None, run_directives={}):
+        '''
+        Parameters:
+            - rfc2822: Enables an initial RFC-2822 style header block, parsed
+            as a "field_list" element (with "class" attribute set to
+            "rfc2822").
+            - inliner: A states.Inliner for inline markup recognition.
+            - run_directives: A dict associating names with Directive *classes*
+            (ie the same thing you'd pass to register_directive), that apply
+            only for this parser, not globally.
+            
+        Also see the package documentation docutils.parsers.rst.
+        '''
+        self.rfc2822 = rfc2822
         self.inliner = inliner
+        self.run_directives = run_directives
 
     def parse(self, inputstring, document):
         """Parse `inputstring` and populate `document`, a document tree."""
         self.setup_parse(inputstring, document)
+        
         self.statemachine = states.RSTStateMachine(
-              state_classes=self.state_classes,
-              initial_state=self.initial_state,
-              debug=document.reporter.debug_flag)
+            rfc2822        = self.rfc2822,
+            run_directives = self.run_directives,
+            debug          = document.reporter.debug_flag
+        )
+        
         inputlines = docutils.statemachine.string2lines(
               inputstring, tab_width=document.settings.tab_width,
               convert_whitespace=1)
