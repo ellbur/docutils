@@ -2368,7 +2368,9 @@ class ODFTranslator(nodes.GenericNodeVisitor):
     def visit_inline(self, node):
         styles = node.attributes.get('classes', ())
         if len(styles) > 0:
-            inline_style =  styles[0]
+            inline_style = styles[0]
+        else:
+            inline_style = ''
         el = SubElement(self.current_element, 'text:span',
             attrib={'text:style-name': self.rststyle(inline_style)})
         self.set_current_element(el)
