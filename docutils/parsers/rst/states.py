@@ -2066,7 +2066,6 @@ class Body(RSTState):
             return self.run_directive(
                 directive_class, match, type_name, option_presets)
         else:
-            assert False
             return self.unknown_directive(type_name)
 
     def run_directive(self, directive, match, type_name, option_presets):
