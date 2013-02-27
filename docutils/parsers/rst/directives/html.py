@@ -86,3 +86,20 @@ class Meta(Directive):
                 line=self.lineno)
             node += error
         return node.children
+
+# Head
+
+class head(nodes.Special, nodes.PreBibliographic, nodes.Element):
+    
+    def __init__(self, content):
+        nodes.Element.__init__(self)
+        
+        self['content'] = content
+    
+class HTMLHeadDirective(Directive):
+    
+    has_content = True
+    
+    def run(self):
+        return [head('\n'.join(self.content))]
+

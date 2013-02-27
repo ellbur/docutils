@@ -1209,6 +1209,14 @@ class HTMLTranslator(nodes.NodeVisitor):
 
     def depart_meta(self, node):
         pass
+    
+    # This is how we add HTML to the <head> of the document.
+    # Otherwise this is very hard to do.
+    def visit_head(self, node):
+        self.head.append(node['content'])
+    
+    def depart_head(self, node):
+        pass
 
     def add_meta(self, tag):
         self.meta.append(tag)

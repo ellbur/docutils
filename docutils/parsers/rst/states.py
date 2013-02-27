@@ -343,7 +343,8 @@ class RSTState(StateWS):
         state_machine.run(block, input_offset, memo=self.memo,
             node=node, match_titles=match_titles)
         
-        blank_finish = state_machine.states[blank_finish_state].blank_finish
+        blank_finish = (state_machine.states[blank_finish_state]
+            .__dict__.get('blank_finish', None))
         state_machine.unlink()
         
         return state_machine.abs_line_offset(), blank_finish
@@ -2784,9 +2785,7 @@ class Text(RSTState):
         parent_node = nodes.Element()
         new_abs_offset = self.nested_parse(
             self.state_machine.input_lines[offset:],
-            input_offset=abs_line_offset, node=parent_node, match_titles=0,
-            state_machine_kwargs={'state_classes': (QuotedLiteralBlock,),
-                                  'initial_state': 'QuotedLiteralBlock'})
+            input_offset=abs_line_offset, node=parent_node, match_titles=0)
         self.goto_line(new_abs_offset)
         return parent_node.children
 

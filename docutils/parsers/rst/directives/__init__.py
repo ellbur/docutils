@@ -50,6 +50,7 @@ _directive_registry = {
       #'citations': ('parts', 'citations'),
       'target-notes': ('references', 'TargetNotes'),
       'meta': ('html', 'Meta'),
+      'html-head': ('html', 'HTMLHeadDirective'),
       #'imagemap': ('html', 'imagemap'),
       'raw': ('misc', 'Raw'),
       'include': ('misc', 'Include'),
