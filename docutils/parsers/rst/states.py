@@ -154,7 +154,7 @@ class RSTStateMachine(StateMachineWS):
         
         if initial_state == None:
             if rfc2822:
-                initial_state = 'RF⃗C2822Body'
+                initial_state = 'RFC2822Body'
             else:
                 initial_state = 'Body'
             
